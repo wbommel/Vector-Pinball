@@ -563,7 +563,7 @@ public class Field7Delegate extends BaseFieldDelegate {
 
     void doJackpot(Field field) {
         field.showGameMessage(field.resolveString("jackpot_received_message"), 3000);
-        field.addScore(JACKPOT_SCORE);
+        field.addScore((long) (JACKPOT_SCORE * field.getScoreMultiplier()));
         starState.resetAndWander();
     }
 
