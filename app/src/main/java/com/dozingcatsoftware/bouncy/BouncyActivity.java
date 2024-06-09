@@ -1,7 +1,5 @@
 package com.dozingcatsoftware.bouncy;
 
-import static com.dozingcatsoftware.bouncy.ScoreView.TOUCH_TO_START_MESSAGE;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -28,7 +26,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.util.Log;
-import android.view.Display;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
@@ -38,7 +35,6 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.ImageButton;
@@ -118,11 +114,8 @@ public class BouncyActivity extends Activity {
     /** Called when the activity is first created. */
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         String arch = System.getProperty("os.arch");
-        Log.i(TAG, "os.arch: " + arch);
-        Log.i(TAG, "API level: " + Build.VERSION.SDK_INT);
-        Log.i(TAG, "Target frame rate: " + getMaxFrameRateForDisplay());
+        Log.i(TAG, "App started, os.arch: " + arch + ", API level: " + Build.VERSION.SDK_INT);
 
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.main);
@@ -276,14 +269,6 @@ public class BouncyActivity extends Activity {
         }
     }
 
-    private float getMaxFrameRateForDisplay() {
-        Display display = ((WindowManager) getSystemService(WINDOW_SERVICE)).getDefaultDisplay();
-        // Apparently some devices return bogus values so use a reasonable minimum, and also
-        // apply a slight adjustment factor so if getRefreshRate() returns 119.9 we'll still try to
-        // run at 120fps.
-        return Math.max(60, display.getRefreshRate() * 1.01f);
-    }
-
     @Override public void onResume() {
         super.onResume();
 
@@ -291,7 +276,6 @@ public class BouncyActivity extends Activity {
         // with the navigation bar on top of the field.
         enterFullscreenMode();
         // Reset frame rate since app or system settings that affect performance could have changed.
-        fieldDriver.setMaxTargetFrameRate(getMaxFrameRateForDisplay());
         fieldDriver.resetFrameRate();
         updateButtons();
     }
@@ -334,12 +318,12 @@ public class BouncyActivity extends Activity {
         }
         // When showing the main menu, switch tables with the flipper buttons.
         if (!field.getGameState().isGameInProgress() && buttonPanel.getVisibility() == View.VISIBLE) {
-            if (FieldViewManager.LEFT_FLIPPER_KEYS.contains(keyCode)) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                 doPreviousTable(null);
                 startGameButton.requestFocus();
                 return true;
             }
-            if (FieldViewManager.RIGHT_FLIPPER_KEYS.contains(keyCode)) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                 doNextTable(null);
                 startGameButton.requestFocus();
                 return true;
@@ -510,9 +494,6 @@ public class BouncyActivity extends Activity {
             if (!field.getGameState().isGameInProgress()) {
                 // game just ended, show button panel and set end game timestamp
                 this.endGameTime = System.currentTimeMillis();
-                // always show LAST_SCORE_MESSAGE immediately at the end of a game
-                // (LAST_SCORE_MESSAGE is next after TOUCH_TO_START_MESSAGE)
-                scoreView.gameOverMessageIndex = TOUCH_TO_START_MESSAGE;
                 updateButtons();
 
                 // No high scores for unlimited balls.
@@ -524,7 +505,6 @@ public class BouncyActivity extends Activity {
                             highScores.size() < MAX_NUM_HIGH_SCORES) {
                         this.updateHighScoreForCurrentLevel(score);
                     }
-                    this.updateLastScoreForCurrentLevel(score);
                 }
             }
         }
@@ -572,7 +552,7 @@ public class BouncyActivity extends Activity {
         return prefs.getLong(lastScorePrefsKeyForLevel(theLevel), 0L);
     }
 
-    void writeHighScoresToPreferences(int level, List<Long> scores) {
+    void writeHighScoresToPreferences(int level, List<Long> scores, long lastScore) {
         StringBuilder scoresAsString = new StringBuilder();
         scoresAsString.append(scores.get(0));
         for (int i = 1; i < scores.size(); i++) {
@@ -581,12 +561,6 @@ public class BouncyActivity extends Activity {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
         SharedPreferences.Editor editor = prefs.edit();
         editor.putString(highScorePrefsKeyForLevel(level), scoresAsString.toString());
-        editor.commit();
-    }
-
-    void writeLastScoreToPreferences(int level, long lastScore) {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
-        SharedPreferences.Editor editor = prefs.edit();
         editor.putLong(lastScorePrefsKeyForLevel(level), lastScore);
         editor.commit();
     }
@@ -609,17 +583,13 @@ public class BouncyActivity extends Activity {
             newHighScores = newHighScores.subList(0, MAX_NUM_HIGH_SCORES);
         }
         this.highScores = newHighScores;
-        writeHighScoresToPreferences(theLevel, this.highScores);
+        this.lastScore = score;
+        writeHighScoresToPreferences(theLevel, this.highScores, this.lastScore);
         scoreView.setHighScores(this.highScores);
     }
 
     void updateHighScoreForCurrentLevel(long score) {
         updateHighScore(currentLevel, score);
-    }
-
-    private void updateLastScoreForCurrentLevel(long score) {
-        this.lastScore = score;
-        writeLastScoreToPreferences(currentLevel, score);
     }
 
     int getInitialLevel() {
